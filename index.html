@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>JAN検品アプリ</title>
 
@@ -17,7 +17,7 @@ body {
   flex-direction: column;
 }
 
-/* ===== 上部 ===== */
+/* ===== 上部操作 ===== */
 #topBar {
   padding: 8px;
   background: #fff;
@@ -50,12 +50,17 @@ body {
 #cameraArea {
   height: 35vh;
   background: #000;
-  position: relative;
 }
 
 #scanner {
   width: 100%;
   height: 100%;
+}
+
+#scanner video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 </style>
 </head>
@@ -80,9 +85,9 @@ body {
 let orders = {};
 let scanned = {};
 let lastScanTime = {};
-const SCAN_INTERVAL = 1500; // ms
+const SCAN_INTERVAL = 1500; // 連続スキャン防止(ms)
 
-/* ===== CSV ===== */
+/* ===== CSV読み込み（iPhone対応） ===== */
 document.getElementById("csvInput").addEventListener("change", e => {
   const file = e.target.files[0];
   if (!file) return;
@@ -98,7 +103,7 @@ function parseCSV(text) {
   lastScanTime = {};
 
   const lines = text.trim().split(/\r?\n/);
-  lines.shift();
+  lines.shift(); // ヘッダ削除
 
   lines.forEach(line => {
     const [jan, name, qty] = line.split(",");
@@ -109,7 +114,7 @@ function parseCSV(text) {
   renderOrders();
 }
 
-/* ===== 表示 ===== */
+/* ===== 注文明細描画 ===== */
 function renderOrders() {
   const list = document.getElementById("orderList");
   list.innerHTML = "";
@@ -123,7 +128,7 @@ function renderOrders() {
       <div class="order-item">
         <div>
           <div>${o.name}</div>
-          <div style="font-size:12px;color:#666;">JAN:${jan}</div>
+          <div style="font-size:12px;color:#666;">JAN: ${jan}</div>
         </div>
         <div class="${ok ? "ok" : "ng"}">
           ${s} / ${o.qty}
@@ -133,39 +138,59 @@ function renderOrders() {
   });
 }
 
-/* ===== スキャン ===== */
+/* ===== スキャナー起動（iOS完全対策） ===== */
 function startScanner() {
+  Quagga.stop();
+  Quagga.offDetected();
+
   Quagga.init({
     inputStream: {
       type: "LiveStream",
       target: document.querySelector("#scanner"),
-      constraints: { facingMode: "environment" }
+      constraints: {
+        facingMode: "environment"
+      }
     },
     decoder: {
-      readers: ["ean_reader"]
+      readers: ["ean_reader"] // JAN(EAN-13)
     }
   }, err => {
     if (err) {
       alert("カメラ起動失敗");
       return;
     }
+
     Quagga.start();
+
+    // ★ iOS強制インライン再生対策
+    setTimeout(() => {
+      const video = document.querySelector("#scanner video");
+      if (video) {
+        video.setAttribute("playsinline", true);
+        video.setAttribute("webkit-playsinline", true);
+        video.muted = true;
+        video.autoplay = true;
+      }
+    }, 300);
   });
 
-  Quagga.onDetected(data => {
-    const jan = data.codeResult.code;
-    const now = Date.now();
+  Quagga.onDetected(onDetectedHandler);
+}
 
-    if (!orders[jan]) return;
+/* ===== 検出処理（暴発防止） ===== */
+function onDetectedHandler(data) {
+  const jan = data.codeResult.code;
+  const now = Date.now();
 
-    if (lastScanTime[jan] && now - lastScanTime[jan] < SCAN_INTERVAL) {
-      return;
-    }
+  if (!orders[jan]) return;
 
-    lastScanTime[jan] = now;
-    scanned[jan]++;
-    renderOrders();
-  });
+  if (lastScanTime[jan] && now - lastScanTime[jan] < SCAN_INTERVAL) {
+    return;
+  }
+
+  lastScanTime[jan] = now;
+  scanned[jan]++;
+  renderOrders();
 }
 </script>
 
