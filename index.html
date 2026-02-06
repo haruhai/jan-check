@@ -1,202 +1,41 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>JAN検品アプリ</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>発注スキャン</title>
 
-<script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
 
-<style>
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  background: #f2f4f7;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-/* ===== 上部 ===== */
-#topBar {
-  padding: 8px;
-  background: #fff;
-  border-bottom: 1px solid #ddd;
-  display: flex;
-  gap: 10px;
-}
-
-/* ===== 注文明細 ===== */
-#orderArea {
-  flex: 1;
-  overflow-y: auto;
-  padding: 10px;
-}
-
-/* ===== カメラ ===== */
-#cameraArea {
-  height: 35vh;
-  background: #000;
-}
-#scanner {
-  width: 100%;
-  height: 100%;
-}
-#scanner video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-/* ===== トースト表示 ===== */
-.toast {
-  position: fixed;
-  top: 40%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  padding: 16px 28px;
-  border-radius: 14px;
-  font-size: 22px;
-  font-weight: bold;
-  color: #fff;
-  z-index: 9999;
-  opacity: 0;
-  transition: opacity 0.2s;
-  pointer-events: none;
-}
-
-.toast.ok {
-  background: rgba(46, 125, 50, 0.9);
-}
-
-.toast.ng {
-  background: rgba(198, 40, 40, 0.9);
-}
-
-.toast.show {
-  opacity: 1;
-}
-</style>
+  <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
 </head>
 
 <body>
+  <header>
+    <h1>📦 発注スキャン</h1>
+  </header>
 
-<div id="topBar">
-  <input type="file" id="csvInput" accept="text/csv">
-  <button onclick="startScanner()">スキャン開始</button>
-</div>
+  <main>
+    <!-- CSV読み込み -->
+    <section id="csvSection">
+      <input type="file" id="csvInput" accept=".csv" />
+    </section>
 
-<div id="orderArea">
-  <h3>注文明細（参考）</h3>
-  <div id="orderList"></div>
-</div>
+    <!-- 注文明細 -->
+    <section id="orderSection">
+      <h2>注文明細</h2>
+      <ul id="orderList"></ul>
+    </section>
 
-<div id="cameraArea">
-  <div id="scanner"></div>
-</div>
+    <!-- カメラ -->
+    <section id="cameraSection">
+      <div id="camera"></div>
+    </section>
+  </main>
 
-<div id="toast" class="toast"></div>
+  <div id="toast"></div>
 
-<script>
-let orders = {};
-let scanned = {};
-let lastScanTime = {};
-const SCAN_INTERVAL = 1200;
-
-/* ===== CSV ===== */
-document.getElementById("csvInput").addEventListener("change", e => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = () => parseCSV(reader.result);
-  reader.readAsText(file, "utf-8");
-});
-
-function parseCSV(text) {
-  orders = {};
-  scanned = {};
-  lastScanTime = {};
-
-  const lines = text.trim().split(/\r?\n/);
-  lines.shift();
-
-  lines.forEach(line => {
-    const [jan, name, qty] = line.split(",");
-    orders[jan] = { name, qty: Number(qty) };
-    scanned[jan] = 0;
-  });
-
-  renderOrders();
-}
-
-function renderOrders() {
-  const list = document.getElementById("orderList");
-  list.innerHTML = "";
-
-  Object.keys(orders).forEach(jan => {
-    const o = orders[jan];
-    list.innerHTML += `
-      <div style="background:#fff;padding:8px;border-radius:8px;margin-bottom:6px;">
-        ${o.name}（${o.qty}）
-      </div>
-    `;
-  });
-}
-
-/* ===== トースト表示 ===== */
-function showToast(text, type, duration) {
-  const toast = document.getElementById("toast");
-  toast.textContent = text;
-  toast.className = `toast ${type} show`;
-
-  setTimeout(() => {
-    toast.classList.remove("show");
-  }, duration);
-}
-
-/* ===== スキャナー ===== */
-function startScanner() {
-  Quagga.stop();
-  Quagga.offDetected();
-
-  Quagga.init({
-    inputStream: {
-      type: "LiveStream",
-      target: document.querySelector("#scanner"),
-      constraints: { facingMode: "environment" }
-    },
-    decoder: { readers: ["ean_reader"] }
-  }, err => {
-    if (err) {
-      alert("カメラ起動失敗");
-      return;
-    }
-    Quagga.start();
-  });
-
-  Quagga.onDetected(onDetectedHandler);
-}
-
-/* ===== 検出処理 ===== */
-function onDetectedHandler(data) {
-  const jan = data.codeResult.code;
-  const now = Date.now();
-
-  if (lastScanTime[jan] && now - lastScanTime[jan] < SCAN_INTERVAL) {
-    return;
-  }
-  lastScanTime[jan] = now;
-
-  if (!orders[jan]) {
-    showToast("注文リスト該当なし", "ng", 1500);
-    return;
-  }
-
-  scanned[jan]++;
-  showToast("OK", "ok", 800);
-}
-</script>
-
+  <script src="app.js"></script>
 </body>
 </html>

@@ -1,11 +1,10 @@
 {
-  "name": "JAN検品アプリ",
-  "short_name": "JAN検品",
+  "name": "発注スキャン",
+  "short_name": "発注スキャン",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#222222",
+  "background_color": "#ffffff",
   "theme_color": "#222222",
-  "orientation": "portrait",
   "icons": [
     {
       "src": "icon-192.png",
