@@ -17,7 +17,7 @@ body {
   flex-direction: column;
 }
 
-/* ===== 上部操作 ===== */
+/* ===== 上部 ===== */
 #topBar {
   padding: 8px;
   background: #fff;
@@ -33,34 +33,48 @@ body {
   padding: 10px;
 }
 
-.order-item {
-  background: #fff;
-  border-radius: 10px;
-  padding: 10px;
-  margin-bottom: 8px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.ok { color: #2e7d32; font-weight: bold; }
-.ng { color: #c62828; font-weight: bold; }
-
 /* ===== カメラ ===== */
 #cameraArea {
   height: 35vh;
   background: #000;
 }
-
 #scanner {
   width: 100%;
   height: 100%;
 }
-
 #scanner video {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* ===== トースト表示 ===== */
+.toast {
+  position: fixed;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 16px 28px;
+  border-radius: 14px;
+  font-size: 22px;
+  font-weight: bold;
+  color: #fff;
+  z-index: 9999;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+
+.toast.ok {
+  background: rgba(46, 125, 50, 0.9);
+}
+
+.toast.ng {
+  background: rgba(198, 40, 40, 0.9);
+}
+
+.toast.show {
+  opacity: 1;
 }
 </style>
 </head>
@@ -73,7 +87,7 @@ body {
 </div>
 
 <div id="orderArea">
-  <h3>注文明細</h3>
+  <h3>注文明細（参考）</h3>
   <div id="orderList"></div>
 </div>
 
@@ -81,13 +95,15 @@ body {
   <div id="scanner"></div>
 </div>
 
+<div id="toast" class="toast"></div>
+
 <script>
 let orders = {};
 let scanned = {};
 let lastScanTime = {};
-const SCAN_INTERVAL = 1500; // 連続スキャン防止(ms)
+const SCAN_INTERVAL = 1200;
 
-/* ===== CSV読み込み（iPhone対応） ===== */
+/* ===== CSV ===== */
 document.getElementById("csvInput").addEventListener("change", e => {
   const file = e.target.files[0];
   if (!file) return;
@@ -103,7 +119,7 @@ function parseCSV(text) {
   lastScanTime = {};
 
   const lines = text.trim().split(/\r?\n/);
-  lines.shift(); // ヘッダ削除
+  lines.shift();
 
   lines.forEach(line => {
     const [jan, name, qty] = line.split(",");
@@ -114,31 +130,32 @@ function parseCSV(text) {
   renderOrders();
 }
 
-/* ===== 注文明細描画 ===== */
 function renderOrders() {
   const list = document.getElementById("orderList");
   list.innerHTML = "";
 
   Object.keys(orders).forEach(jan => {
     const o = orders[jan];
-    const s = scanned[jan];
-    const ok = s === o.qty;
-
     list.innerHTML += `
-      <div class="order-item">
-        <div>
-          <div>${o.name}</div>
-          <div style="font-size:12px;color:#666;">JAN: ${jan}</div>
-        </div>
-        <div class="${ok ? "ok" : "ng"}">
-          ${s} / ${o.qty}
-        </div>
+      <div style="background:#fff;padding:8px;border-radius:8px;margin-bottom:6px;">
+        ${o.name}（${o.qty}）
       </div>
     `;
   });
 }
 
-/* ===== スキャナー起動（iOS完全対策） ===== */
+/* ===== トースト表示 ===== */
+function showToast(text, type, duration) {
+  const toast = document.getElementById("toast");
+  toast.textContent = text;
+  toast.className = `toast ${type} show`;
+
+  setTimeout(() => {
+    toast.classList.remove("show");
+  }, duration);
+}
+
+/* ===== スキャナー ===== */
 function startScanner() {
   Quagga.stop();
   Quagga.offDetected();
@@ -147,50 +164,37 @@ function startScanner() {
     inputStream: {
       type: "LiveStream",
       target: document.querySelector("#scanner"),
-      constraints: {
-        facingMode: "environment"
-      }
+      constraints: { facingMode: "environment" }
     },
-    decoder: {
-      readers: ["ean_reader"] // JAN(EAN-13)
-    }
+    decoder: { readers: ["ean_reader"] }
   }, err => {
     if (err) {
       alert("カメラ起動失敗");
       return;
     }
-
     Quagga.start();
-
-    // ★ iOS強制インライン再生対策
-    setTimeout(() => {
-      const video = document.querySelector("#scanner video");
-      if (video) {
-        video.setAttribute("playsinline", true);
-        video.setAttribute("webkit-playsinline", true);
-        video.muted = true;
-        video.autoplay = true;
-      }
-    }, 300);
   });
 
   Quagga.onDetected(onDetectedHandler);
 }
 
-/* ===== 検出処理（暴発防止） ===== */
+/* ===== 検出処理 ===== */
 function onDetectedHandler(data) {
   const jan = data.codeResult.code;
   const now = Date.now();
 
-  if (!orders[jan]) return;
-
   if (lastScanTime[jan] && now - lastScanTime[jan] < SCAN_INTERVAL) {
     return;
   }
-
   lastScanTime[jan] = now;
+
+  if (!orders[jan]) {
+    showToast("注文リスト該当なし", "ng", 1500);
+    return;
+  }
+
   scanned[jan]++;
-  renderOrders();
+  showToast("OK", "ok", 800);
 }
 </script>
 
